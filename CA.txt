@@ -1,0 +1,98 @@
+Python Script:
+
+Python Code to parallelise the gem5 simulation for different configurations. Number of parallel process that can execute at a time can be determined by variable size_l1_i, assoc_l1 and size_l1_d. It will create separate folders with naming convention of “Benchmark_icachesize_dcachesize_L1associativity_L2size_L2associativity_cachelinesize” for all the combinations.
+
+#! /usr/bin/env python
+import os
+from multiprocessing import Process, current_process
+
+#constant 
+bench_name = ['401.bzip2']#,'458.sjeng','470.lbm']
+
+assoc_l1=['1','2']
+assoc_l2=['1','2']
+cpu_model=['timing']
+block_size=['64','32']
+size_l1_i=['128kB','256kB']
+size_l1_d=['512kB','256kB']
+size_l2=['4MB','2MB']
+gem5_dir = "/usr/local/gem5/"
+loc="~/damo/b/"
+bench="/src/benchmark" 
+inp="/data/input.program"  # change appropriately for each bench mark
+#process job
+def joob(x,xx,z,i):
+	for j in bench_name:
+		for k in block_size:
+			for ff in size_l2:
+				for dd in assoc_l2:
+					os.mkdir(j[4:9]+"_"+x+"_"+xx+"_"+z+"_"+ff+"_"+dd+"_"+k)
+					os.system(gem5_dir+"build/X86/gem5.opt -d ~/damo/"+j[4:9]+"_"+x+"_"+xx+"_"+z+"_"+ff+"_"+dd+"_"+k+" "+gem5_dir+"configs/example/se.py -I 500000000 -c "+loc+j+bench+" -o "+loc+j+inp+" --cpu-type="+i
+					+" --caches --l2cache --l1d_size="+xx+" --l1i_size="+x+" --l2_size="+ff+" --l1d_assoc="+z+" --l1i_assoc="+z+" --l2_assoc="+dd+" --cacheline_size="+k)
+					fp = open(j[4:9]+"_"+x+"_"+xx+"_"+z+"_"+ff+"_"+dd+"_"+k+"/indx.txt","w")
+					fp.write(j[4:9]+"_"+x+"_"+xx+"_"+z+"_"+ff+"_"+dd+"_"+k+" Finished!!!\n")
+					fp.close()	
+#main
+count =0
+if __name__ == '__main__':
+	procs=[]
+	for i in cpu_model:
+		for x in size_l1_i:
+			for z in assoc_l1:
+				for xx in size_l1_d:
+					proc = Process(target=joob, args=(x,xx,z,i,))
+					procs.append(proc)
+					proc.start()
+					#joob(j,x,xx,z,ff,dd,k,i)
+					#count+=1
+	for ss in procs:
+		ss.join()
+#print(count)
+
+The below python script is used to calculate the CPI from all the folders that are created by the above code. It will the data in .CSV file which later we can save it as .xlsx file for analysis.
+
+cs = open("output.csv","w")
+cs.write("Config,dcache_miss,icache_miss,l2cache_miss,CPI\n")
+
+bench_name = ['bzip2','mcf','hmmer','sjeng','lbm']
+assoc_l1=['1','2']
+assoc_l2=['1','2']
+cpu_model=['timing']
+block_size=['32','64']
+size_l1_d=['128kB','256kB']
+size_l1_i=['128kB','256kB']
+size_l2=['1MB','2MB']
+
+for aa in bench_name:
+	for b in assoc_l1:
+		for c in assoc_l2:
+			for e in block_size:
+				for f in size_l1_d:
+					for g in size_l1_i:
+						for h in size_l2:
+							fp = open(aa+"_"+g+"_"+f+"_"+b+"_"+h+"_"+c+"_"+e+"/stats.txt",'r') # read the stats file
+							a=fp.read()
+							icach=a.index('system.cpu.icache.overall_misses::total',55)
+							icach = a[icach+39:-1].split(' ')
+							for i in icach:
+								if i !='':
+									icach=i
+									break
+							dcach=a.index('system.cpu.dcache.overall_misses::total',55)
+							dcach = a[dcach+39:-1].split(' ')
+							for i in dcach:
+								if i !='':
+									dcach=i
+									break
+							l2cac=a.index('system.l2.overall_misses::total',55)
+							l2cac = a[l2cac+31:-1].split(' ')
+							for i in l2cac:
+								if i !='':
+									l2cac=i
+									break
+							x=int(icach)+int(dcach)
+							y=int(l2cac)
+							cpi = 1.00 + ((x*4.00)+(y*80.00))/500000000.00
+							cs.write(aa+"_"+g+"_"+f+"_"+b+"_"+h+"_"+c+"_"+e+','+dcach+","+icach+","+l2cac+","+str(cpi)+'\n')
+							fp.close()
+
